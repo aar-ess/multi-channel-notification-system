@@ -94,3 +94,27 @@ async def submit_notification(
         "id": notif_id,
         "status": "pending"
     }
+
+
+@app.get("/notifications/{notification_id}")
+def get_notification_status(notification_id: str):
+    db = SessionLocal()
+
+    try:
+        notification = db.get(
+            Notification,
+            notification_id
+        )
+
+        if notification is None:
+            return {
+                "error": "Notification not found"
+            }
+
+        return {
+            "id": notification.id,
+            "status": notification.status
+        }
+
+    finally:
+        db.close()
