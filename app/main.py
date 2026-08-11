@@ -63,11 +63,30 @@ async def submit_notification(
     payload: NotificationIn,
     background_tasks: BackgroundTasks
 ):
-    notif_id = str(uuid.uuid4())
-
     db = SessionLocal()
 
     try:
+        # Check for an existing notification with the same
+        # deduplication key for this user.
+        if payload.dedup_key:
+            existing = (
+                db.query(Notification)
+                .filter(
+                    Notification.user_id == payload.user_id,
+                    Notification.dedup_key == payload.dedup_key
+                )
+                .first()
+            )
+
+            if existing:
+                return {
+                    "id": existing.id,
+                    "status": "duplicate",
+                    "message": "Notification already exists"
+                }
+
+        notif_id = str(uuid.uuid4())
+
         notification = Notification(
             id=notif_id,
             user_id=payload.user_id,
