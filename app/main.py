@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from fastapi import FastAPI, BackgroundTasks
 from pydantic import BaseModel
@@ -31,11 +32,46 @@ class NotificationIn(BaseModel):
 class PreferenceIn(BaseModel):
     channel_priority: list[str] | None = None
     opted_out_channels: list[str] | None = None
+    quiet_hours_start: str | None = None
+    quiet_hours_end: str | None = None
 
 
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+def is_quiet_hours(
+    current_time,
+    start_time,
+    end_time
+):
+    if not start_time or not end_time:
+        return False
+
+    try:
+        start = datetime.strptime(
+            start_time,
+            "%H:%M"
+        ).time()
+
+        end = datetime.strptime(
+            end_time,
+            "%H:%M"
+        ).time()
+
+    except ValueError:
+        return False
+
+    # Normal quiet-hours period, e.g. 22:00 -> 07:00
+    if start > end:
+        return (
+            current_time >= start
+            or current_time < end
+        )
+
+    # Same-day period, e.g. 13:00 -> 14:00
+    return start <= current_time < end
 
 
 async def run_dispatch(
@@ -84,6 +120,24 @@ async def run_dispatch(
                     if channel.strip()
                 ]
 
+            # Check quiet hours before attempting delivery.
+            current_time = datetime.now().time()
+
+            if is_quiet_hours(
+                current_time,
+                preference.quiet_hours_start,
+                preference.quiet_hours_end
+            ):
+                notification.status = (
+                    "deferred_quiet_hours"
+                )
+                db.commit()
+                print(
+                    "NOTIFICATION DEFERRED: "
+                    "quiet hours active"
+                )
+                return
+
         result = await dispatch_notification(
             notification,
             force_fail_channels,
@@ -107,9 +161,7 @@ async def submit_notification(
     db = SessionLocal()
 
     try:
-
-        # Check for an existing notification with
-        # the same deduplication key for this user.
+        # Check for duplicate notification.
         if payload.dedup_key:
 
             existing = (
@@ -213,19 +265,35 @@ def update_preferences(
                 payload.opted_out_channels
             )
 
+        if payload.quiet_hours_start is not None:
+            preference.quiet_hours_start = (
+                payload.quiet_hours_start
+            )
+
+        if payload.quiet_hours_end is not None:
+            preference.quiet_hours_end = (
+                payload.quiet_hours_end
+            )
+
         db.commit()
 
         return {
             "user_id": user_id,
             "channel_priority": (
-                payload.channel_priority
-                if payload.channel_priority is not None
+                preference.channel_priority.split(",")
+                if preference.channel_priority
                 else []
             ),
             "opted_out_channels": (
-                payload.opted_out_channels
-                if payload.opted_out_channels is not None
+                preference.opted_out_channels.split(",")
+                if preference.opted_out_channels
                 else []
+            ),
+            "quiet_hours_start": (
+                preference.quiet_hours_start
+            ),
+            "quiet_hours_end": (
+                preference.quiet_hours_end
             )
         }
 
@@ -251,7 +319,9 @@ def get_preferences(user_id: str):
                     "sms",
                     "email"
                 ],
-                "opted_out_channels": []
+                "opted_out_channels": [],
+                "quiet_hours_start": None,
+                "quiet_hours_end": None
             }
 
         return {
@@ -265,6 +335,12 @@ def get_preferences(user_id: str):
                 preference.opted_out_channels.split(",")
                 if preference.opted_out_channels
                 else []
+            ),
+            "quiet_hours_start": (
+                preference.quiet_hours_start
+            ),
+            "quiet_hours_end": (
+                preference.quiet_hours_end
             )
         }
 
