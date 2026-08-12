@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from datetime import datetime
 
@@ -26,6 +27,8 @@ class NotificationIn(BaseModel):
     urgency: str
     message: str
     dedup_key: str | None = None
+    notification_type: str = "automatic"
+    scheduled_at: datetime | None = None
     force_fail_channels: list[str] = []
 
 
@@ -63,14 +66,12 @@ def is_quiet_hours(
     except ValueError:
         return False
 
-    # Normal quiet-hours period, e.g. 22:00 -> 07:00
     if start > end:
         return (
             current_time >= start
             or current_time < end
         )
 
-    # Same-day period, e.g. 13:00 -> 14:00
     return start <= current_time < end
 
 
@@ -88,6 +89,32 @@ async def run_dispatch(
 
         if notification is None:
             return
+
+        # Wait until scheduled time.
+        if notification.scheduled_at:
+            now = datetime.now()
+
+            if notification.scheduled_at > now:
+                wait_seconds = (
+                    notification.scheduled_at - now
+                ).total_seconds()
+
+                notification.status = "scheduled"
+                db.commit()
+
+                db.close()
+
+                await asyncio.sleep(wait_seconds)
+
+                db = SessionLocal()
+
+                notification = db.get(
+                    Notification,
+                    notif_id
+                )
+
+                if notification is None:
+                    return
 
         preference = db.get(
             UserPreference,
@@ -120,7 +147,6 @@ async def run_dispatch(
                     if channel.strip()
                 ]
 
-            # Check quiet hours before attempting delivery.
             current_time = datetime.now().time()
 
             if is_quiet_hours(
@@ -131,11 +157,14 @@ async def run_dispatch(
                 notification.status = (
                     "deferred_quiet_hours"
                 )
+
                 db.commit()
+
                 print(
                     "NOTIFICATION DEFERRED: "
                     "quiet hours active"
                 )
+
                 return
 
         result = await dispatch_notification(
@@ -158,10 +187,35 @@ async def submit_notification(
     payload: NotificationIn,
     background_tasks: BackgroundTasks
 ):
+    valid_types = {
+        "manual",
+        "automatic",
+        "scheduled"
+    }
+
+    if payload.notification_type not in valid_types:
+        return {
+            "error": (
+                "notification_type must be "
+                "manual, automatic, or scheduled"
+            )
+        }
+
+    if (
+        payload.notification_type == "scheduled"
+        and payload.scheduled_at is None
+    ):
+        return {
+            "error": (
+                "scheduled_at is required "
+                "for scheduled notifications"
+            )
+        }
+
     db = SessionLocal()
 
     try:
-        # Check for duplicate notification.
+
         if payload.dedup_key:
 
             existing = (
@@ -189,7 +243,13 @@ async def submit_notification(
             urgency=payload.urgency,
             message=payload.message,
             dedup_key=payload.dedup_key,
-            status="pending"
+            notification_type=payload.notification_type,
+            scheduled_at=payload.scheduled_at,
+            status=(
+                "scheduled"
+                if payload.scheduled_at
+                else "pending"
+            )
         )
 
         db.add(notification)
@@ -206,7 +266,12 @@ async def submit_notification(
 
     return {
         "id": notif_id,
-        "status": "pending"
+        "status": (
+            "scheduled"
+            if payload.scheduled_at
+            else "pending"
+        ),
+        "notification_type": payload.notification_type
     }
 
 
@@ -229,7 +294,9 @@ def get_notification_status(
 
         return {
             "id": notification.id,
-            "status": notification.status
+            "status": notification.status,
+            "notification_type": notification.notification_type,
+            "scheduled_at": notification.scheduled_at
         }
 
     finally:
