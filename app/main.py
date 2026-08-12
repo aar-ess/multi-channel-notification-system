@@ -4,7 +4,10 @@ from fastapi import FastAPI, BackgroundTasks
 from pydantic import BaseModel
 
 from app.database import create_tables, SessionLocal
-from app.models.notification import Notification
+from app.models.notification import (
+    Notification,
+    UserPreference,
+)
 from app.services.dispatcher import dispatch_notification
 
 
@@ -23,6 +26,11 @@ class NotificationIn(BaseModel):
     message: str
     dedup_key: str | None = None
     force_fail_channels: list[str] = []
+
+
+class PreferenceIn(BaseModel):
+    channel_priority: list[str] | None = None
+    opted_out_channels: list[str] | None = None
 
 
 @app.get("/health")
@@ -45,9 +53,42 @@ async def run_dispatch(
         if notification is None:
             return
 
+        preference = db.get(
+            UserPreference,
+            notification.user_id
+        )
+
+        preferred_channels = [
+            "push",
+            "sms",
+            "email"
+        ]
+
+        opted_out_channels = []
+
+        if preference:
+
+            if preference.channel_priority:
+                preferred_channels = [
+                    channel.strip()
+                    for channel in
+                    preference.channel_priority.split(",")
+                    if channel.strip()
+                ]
+
+            if preference.opted_out_channels:
+                opted_out_channels = [
+                    channel.strip()
+                    for channel in
+                    preference.opted_out_channels.split(",")
+                    if channel.strip()
+                ]
+
         result = await dispatch_notification(
             notification,
-            force_fail_channels
+            force_fail_channels,
+            preferred_channels,
+            opted_out_channels
         )
 
         notification.status = result["status"]
@@ -66,9 +107,11 @@ async def submit_notification(
     db = SessionLocal()
 
     try:
-        # Check for an existing notification with the same
-        # deduplication key for this user.
+
+        # Check for an existing notification with
+        # the same deduplication key for this user.
         if payload.dedup_key:
+
             existing = (
                 db.query(Notification)
                 .filter(
@@ -116,7 +159,9 @@ async def submit_notification(
 
 
 @app.get("/notifications/{notification_id}")
-def get_notification_status(notification_id: str):
+def get_notification_status(
+    notification_id: str
+):
     db = SessionLocal()
 
     try:
@@ -133,6 +178,94 @@ def get_notification_status(notification_id: str):
         return {
             "id": notification.id,
             "status": notification.status
+        }
+
+    finally:
+        db.close()
+
+
+@app.put("/preferences/{user_id}")
+def update_preferences(
+    user_id: str,
+    payload: PreferenceIn
+):
+    db = SessionLocal()
+
+    try:
+        preference = db.get(
+            UserPreference,
+            user_id
+        )
+
+        if preference is None:
+            preference = UserPreference(
+                user_id=user_id
+            )
+            db.add(preference)
+
+        if payload.channel_priority is not None:
+            preference.channel_priority = ",".join(
+                payload.channel_priority
+            )
+
+        if payload.opted_out_channels is not None:
+            preference.opted_out_channels = ",".join(
+                payload.opted_out_channels
+            )
+
+        db.commit()
+
+        return {
+            "user_id": user_id,
+            "channel_priority": (
+                payload.channel_priority
+                if payload.channel_priority is not None
+                else []
+            ),
+            "opted_out_channels": (
+                payload.opted_out_channels
+                if payload.opted_out_channels is not None
+                else []
+            )
+        }
+
+    finally:
+        db.close()
+
+
+@app.get("/preferences/{user_id}")
+def get_preferences(user_id: str):
+    db = SessionLocal()
+
+    try:
+        preference = db.get(
+            UserPreference,
+            user_id
+        )
+
+        if preference is None:
+            return {
+                "user_id": user_id,
+                "channel_priority": [
+                    "push",
+                    "sms",
+                    "email"
+                ],
+                "opted_out_channels": []
+            }
+
+        return {
+            "user_id": user_id,
+            "channel_priority": (
+                preference.channel_priority.split(",")
+                if preference.channel_priority
+                else []
+            ),
+            "opted_out_channels": (
+                preference.opted_out_channels.split(",")
+                if preference.opted_out_channels
+                else []
+            )
         }
 
     finally:
