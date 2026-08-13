@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Multi-Channel Notification System — real-time delivery monitoring, fallback tracking and escalation alerts.">
+    <title>Notification Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --ink:      #0a0a0a;
+            --ink-2:    #1a1a1a;
+            --ink-3:    #2a2a2a;
+            --dim-1:    #525252;
+            --dim-2:    #737373;
+            --dim-3:    #a3a3a3;
+            --rule:     #e8e8e8;
+            --rule-2:   #f0f0f0;
+            --wash:     #f7f7f7;
+            --paper:    #ffffff;
+            --r:        8px;
+            --r-sm:     5px;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.08);
+            --shadow:    0 4px 12px rgba(0,0,0,.08), 0 1px 3px rgba(0,0,0,.05);
+            --shadow-lg: 0 8px 32px rgba(0,0,0,.10), 0 2px 8px rgba(0,0,0,.06);
+        }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: var(--wash);
+            color: var(--ink);
+            min-height: 100vh;
+            font-size: 13.5px;
+            line-height: 1.55;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ─── Scrollbar ──────────────────────────────────── */
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--dim-3); border-radius: 10px; }
+
+        /* ─── Header ─────────────────────────────────────── */
+        header {
+            background: var(--ink);
+            padding: 0 36px;
+            height: 58px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            border-bottom: 1px solid var(--ink-3);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-mark {
+            width: 28px; height: 28px;
+            background: white;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .brand-mark svg { display: block; }
+
+        .brand-name {
+            font-size: 14px;
+            font-weight: 650;
+            color: white;
+            letter-spacing: -0.025em;
+        }
+
+        .brand-sep {
+            width: 1px; height: 16px;
+            background: var(--ink-3);
+        }
+
+        .brand-sub {
+            font-size: 12px;
+            color: var(--dim-2);
+            font-weight: 400;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .live-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 11px;
+            background: rgba(255,255,255,.06);
+            border: 1px solid rgba(255,255,255,.10);
+            border-radius: 20px;
+            cursor: default;
+        }
+
+        .live-dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: #ffffff;
+            animation: livepulse 2.2s ease-in-out infinite;
+        }
+
+        @keyframes livepulse {
+            0%,100% { opacity:1; box-shadow: 0 0 0 0 rgba(255,255,255,.35); }
+            50%      { opacity:.3; box-shadow: 0 0 0 4px rgba(255,255,255,0); }
+        }
+
+        .live-text {
+            font-size: 10.5px;
+            font-weight: 600;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            color: rgba(255,255,255,.6);
+        }
+
+        #last-updated {
+            font-size: 11.5px;
+            color: var(--dim-2);
+        }
+
+        .hdr-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border: 1px solid rgba(255,255,255,.15);
+            border-radius: var(--r-sm);
+            background: transparent;
+            color: rgba(255,255,255,.75);
+            font-family: inherit;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: border-color .15s, color .15s, background .15s;
+        }
+
+        .hdr-btn:hover:not(:disabled) {
+            border-color: rgba(255,255,255,.35);
+            color: white;
+            background: rgba(255,255,255,.05);
+        }
+
+        .hdr-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+        /* ─── Page wrapper ───────────────────────────────── */
+        .page {
+            max-width: 1300px;
+            margin: 32px auto;
+            padding: 0 28px;
+        }
+
+        /* ─── Section label ──────────────────────────────── */
+        .section-label {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: .12em;
+            text-transform: uppercase;
+            color: var(--dim-3);
+            margin-bottom: 14px;
+        }
+
+        /* ─── Escalation banner ──────────────────────────── */
+        #escalation-banner {
+            display: none;
+            background: var(--ink);
+            border: 1px solid var(--ink-3);
+            border-radius: var(--r);
+            margin-bottom: 24px;
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+
+        #escalation-banner.visible { display: block; }
+
+        .esc-hdr {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 13px 20px;
+            border-bottom: 1px solid rgba(255,255,255,.06);
+        }
+
+        .esc-icon {
+            width: 22px; height: 22px;
+            border-radius: 50%;
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .esc-title {
+            font-size: 12px;
+            font-weight: 650;
+            color: white;
+            letter-spacing: .01em;
+        }
+
+        .esc-badge {
+            margin-left: auto;
+            padding: 2px 9px;
+            background: rgba(255,255,255,.1);
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            color: rgba(255,255,255,.7);
+        }
+
+        .esc-row {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 12px 20px;
+            border-bottom: 1px solid rgba(255,255,255,.04);
+        }
+
+        .esc-row:last-child { border-bottom: none; }
+
+        .esc-id {
+            font-family: 'SFMono-Regular', 'Fira Code', monospace;
+            font-size: 11px;
+            color: rgba(255,255,255,.35);
+            flex-shrink: 0;
+        }
+
+        .esc-reason {
+            font-size: 12.5px;
+            color: rgba(255,255,255,.7);
+            font-weight: 400;
+        }
+
+        .esc-time {
+            margin-left: auto;
+            font-size: 11px;
+            color: rgba(255,255,255,.25);
+            flex-shrink: 0;
+        }
+
+        /* ─── Stat bar ───────────────────────────────────── */
+        .stat-bar {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: var(--paper);
+            border: 1px solid var(--rule);
+            border-radius: var(--r);
+            padding: 20px 20px 18px;
+            box-shadow: var(--shadow-sm);
+            transition: box-shadow .2s, transform .2s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(0,0,0,.012) 0%, transparent 60%);
+            pointer-events: none;
+        }
+
+        .stat-card:hover {
+            box-shadow: var(--shadow);
+            transform: translateY(-1px);
+        }
+
+        .stat-card.hero {
+            background: var(--ink);
+            border-color: transparent;
+            box-shadow: var(--shadow);
+        }
+
+        .stat-card.hero:hover {
+            box-shadow: var(--shadow-lg);
+        }
+
+        .stat-label {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: .10em;
+            text-transform: uppercase;
+            color: var(--dim-3);
+            margin-bottom: 10px;
+        }
+
+        .stat-card.hero .stat-label { color: rgba(255,255,255,.35); }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 750;
+            letter-spacing: -.04em;
+            color: var(--ink);
+            line-height: 1;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .stat-card.hero .stat-value { color: white; }
+
+        .stat-sub {
+            font-size: 11px;
+            color: var(--dim-3);
+            margin-top: 6px;
+        }
+
+        .stat-card.hero .stat-sub { color: rgba(255,255,255,.25); }
+
+        /* ─── Panel ──────────────────────────────────────── */
+        .panel {
+            background: var(--paper);
+            border: 1px solid var(--rule);
+            border-radius: var(--r);
+            box-shadow: var(--shadow-sm);
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        .panel-hdr {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 15px 22px;
+            border-bottom: 1px solid var(--rule-2);
+        }
+
+        .panel-title {
+            font-size: 13.5px;
+            font-weight: 650;
+            letter-spacing: -.012em;
+        }
+
+        .panel-meta {
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--dim-3);
+            letter-spacing: .04em;
+            text-transform: uppercase;
+        }
+
+        .panel-body { padding: 22px; }
+
+        /* ─── Grid layouts ───────────────────────────────── */
+        .col-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .col-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 1px; background: var(--rule-2); border-radius: 6px; overflow: hidden; }
+
+        /* ─── Channel performance cards ──────────────────── */
+        .ch-block {
+            background: var(--paper);
+            padding: 20px 22px;
+            transition: background .15s;
+        }
+
+        .ch-block:hover { background: var(--wash); }
+
+        .ch-label {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+            color: var(--dim-3);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .ch-label::before {
+            content: '';
+            display: block;
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: var(--ink);
+        }
+
+        .ch-number {
+            font-size: 30px;
+            font-weight: 750;
+            letter-spacing: -.04em;
+            color: var(--ink);
+            margin-bottom: 12px;
+        }
+
+        .ch-row {
+            display: flex;
+            gap: 16px;
+        }
+
+        .ch-stat {
+            font-size: 11.5px;
+            color: var(--dim-2);
+        }
+
+        .ch-stat strong {
+            font-weight: 650;
+            color: var(--ink);
+        }
+
+        /* ─── Tables ─────────────────────────────────────── */
+        table { width: 100%; border-collapse: collapse; }
+
+        th {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: .09em;
+            text-transform: uppercase;
+            color: var(--dim-3);
+            padding: 0 22px 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--rule-2);
+        }
+
+        td {
+            padding: 13px 22px;
+            font-size: 12.5px;
+            color: var(--dim-1);
+            border-bottom: 1px solid var(--rule-2);
+        }
+
+        tbody tr:last-child td { border-bottom: none; }
+
+        tbody tr {
+            transition: background .1s;
+        }
+
+        tbody tr:hover td {
+            background: var(--wash);
+            color: var(--ink);
+        }
+
+        .cell-mono {
+            font-family: 'SFMono-Regular', 'Fira Code', monospace;
+            font-size: 11.5px;
+            color: var(--dim-3);
+        }
+
+        .empty-row td {
+            text-align: center;
+            color: var(--dim-3);
+            padding: 36px 22px;
+            font-size: 12.5px;
+        }
+
+        /* ─── Status badges ──────────────────────────────── */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 10.5px;
+            font-weight: 650;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            padding: 3px 8px 3.5px;
+            border-radius: 4px;
+        }
+
+        .badge-dot {
+            width: 4px; height: 4px;
+            border-radius: 50%;
+            background: currentColor;
+            flex-shrink: 0;
+        }
+
+        .b-delivered  { background: var(--ink);  color: white; }
+        .b-failed     { background: var(--wash);  color: var(--dim-1); border: 1px solid var(--rule); }
+        .b-deferred   { background: #f0f0f0;      color: var(--dim-1); }
+        .b-pending    { background: var(--wash);  color: var(--dim-3); border: 1px solid var(--rule); }
+        .b-escalated  { background: var(--ink-2); color: white; }
+        .b-scheduled  { background: #ebebeb;      color: var(--dim-2); }
+        .b-default    { background: var(--wash);  color: var(--dim-3); }
+        .b-timeout    { background: #f5f5f5;      color: var(--dim-1); border: 1px solid var(--rule); }
+
+        /* ─── Fallback arrow ─────────────────────────────── */
+        .fb-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            padding: 3px 8px;
+            background: var(--wash);
+            border: 1px solid var(--rule);
+            border-radius: 4px;
+            font-size: 11.5px;
+            font-weight: 550;
+            color: var(--dim-1);
+        }
+
+        .fb-arrow {
+            color: var(--dim-3);
+            font-size: 13px;
+            margin: 0 3px;
+        }
+
+        /* ─── Quick test grid ────────────────────────────── */
+        .test-grid {
+            display: grid;
+            grid-template-columns: repeat(4,1fr);
+            gap: 12px;
+        }
+
+        .test-card {
+            background: var(--paper);
+            border: 1px solid var(--rule);
+            border-radius: var(--r);
+            padding: 18px;
+            cursor: pointer;
+            font-family: inherit;
+            text-align: left;
+            transition: border-color .18s, box-shadow .18s, transform .12s;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .test-card:hover:not(:disabled) {
+            border-color: var(--dim-3);
+            box-shadow: var(--shadow);
+            transform: translateY(-2px);
+        }
+
+        .test-card:active:not(:disabled) { transform: translateY(0); }
+        .test-card:disabled { opacity: .45; cursor: not-allowed; }
+
+        .test-ic {
+            width: 32px; height: 32px;
+            background: var(--ink);
+            border-radius: 7px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .test-name {
+            font-size: 13px;
+            font-weight: 650;
+            color: var(--ink);
+            letter-spacing: -.01em;
+        }
+
+        .test-desc {
+            font-size: 11.5px;
+            color: var(--dim-2);
+            line-height: 1.5;
+        }
+
+        /* ─── Form ───────────────────────────────────────── */
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        .field { display: flex; flex-direction: column; gap: 6px; }
+        .field.full { grid-column: 1/-1; }
+
+        label {
+            font-size: 10.5px;
+            font-weight: 650;
+            letter-spacing: .07em;
+            text-transform: uppercase;
+            color: var(--dim-2);
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 9px 12px;
+            border: 1px solid var(--rule);
+            border-radius: var(--r-sm);
+            font-family: inherit;
+            font-size: 13px;
+            color: var(--ink);
+            background: var(--paper);
+            outline: none;
+            transition: border-color .15s, box-shadow .15s;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            border-color: var(--ink);
+            box-shadow: 0 0 0 3px rgba(0,0,0,.06);
+        }
+
+        textarea { resize: vertical; min-height: 80px; }
+
+        .btn-primary {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 22px;
+            background: var(--ink);
+            color: white;
+            border: 1px solid transparent;
+            border-radius: var(--r-sm);
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity .15s, transform .1s, box-shadow .15s;
+            box-shadow: 0 1px 3px rgba(0,0,0,.2), 0 1px 2px rgba(0,0,0,.12);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            opacity: .85;
+            box-shadow: 0 4px 12px rgba(0,0,0,.18);
+        }
+
+        .btn-primary:active:not(:disabled) { transform: scale(.98); }
+        .btn-primary:disabled { opacity: .4; cursor: not-allowed; }
+
+        /* ─── Toast ──────────────────────────────────────── */
+        #toast {
+            position: fixed;
+            bottom: 28px;
+            right: 28px;
+            background: var(--ink);
+            color: white;
+            padding: 12px 20px;
+            border-radius: var(--r);
+            font-size: 13px;
+            font-weight: 400;
+            opacity: 0;
+            transform: translateY(12px) scale(.97);
+            transition: opacity .22s, transform .22s;
+            pointer-events: none;
+            z-index: 300;
+            max-width: 380px;
+            line-height: 1.45;
+            box-shadow: var(--shadow-lg);
+        }
+
+        #toast.show { opacity: 1; transform: translateY(0) scale(1); }
+        #toast.err  { background: var(--ink-2); }
+
+        /* ─── Spinner ─────────────────────────────────────── */
+        .spin {
+            display: inline-block;
+            width: 12px; height: 12px;
+            border: 1.8px solid currentColor;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: _spin .55s linear infinite;
+        }
+
+        @keyframes _spin { to { transform: rotate(360deg); } }
+
+        /* ─── Count-up animation support ────────────────── */
+        .stat-value { transition: opacity .3s; }
+
+        /* ─── Responsive ─────────────────────────────────── */
+        @media (max-width: 1100px) {
+            .stat-bar { grid-template-columns: repeat(3,1fr); }
+            .test-grid { grid-template-columns: 1fr 1fr; }
+        }
+
+        @media (max-width: 768px) {
+            header { padding: 0 18px; }
+            .page { padding: 0 14px; margin-top: 20px; }
+            .stat-bar { grid-template-columns: repeat(2,1fr); }
+            .col-2 { grid-template-columns: 1fr; }
+            .col-3 { grid-template-columns: 1fr; }
+            .test-grid { grid-template-columns: 1fr; }
+            .form-grid { grid-template-columns: 1fr; }
+            .field.full { grid-column: auto; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ─── Header ───────────────────────────────────────────── -->
+<header>
+    <div class="brand">
+        <div class="brand-mark">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <rect x="1" y="1" width="6" height="6" rx="1.5" fill="#0a0a0a"/>
+                <rect x="9" y="1" width="6" height="6" rx="1.5" fill="#0a0a0a" opacity=".4"/>
+                <rect x="1" y="9" width="6" height="6" rx="1.5" fill="#0a0a0a" opacity=".4"/>
+                <rect x="9" y="9" width="6" height="6" rx="1.5" fill="#0a0a0a"/>
+            </svg>
+        </div>
+        <span class="brand-name">Notification Dashboard</span>
+        <div class="brand-sep"></div>
+        <span class="brand-sub">Multi-Channel Delivery System</span>
+    </div>
+    <div class="header-right">
+        <span id="last-updated" style="font-size:11.5px;color:#525252;"></span>
+        <div class="live-badge">
+            <div class="live-dot"></div>
+            <span class="live-text">Live</span>
+        </div>
+        <button class="hdr-btn" id="refresh-btn" onclick="loadDashboard()">
+            Refresh
+        </button>
+    </div>
+</header>
+
+<div class="page">
+
+    <!-- ─── Escalation Alert Banner ─────────────────────── -->
+    <div id="escalation-banner">
+        <div class="esc-hdr">
+            <div class="esc-icon">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                    <path d="M8 2L14 13H2L8 2Z" stroke="#0a0a0a" stroke-width="1.6" stroke-linejoin="round"/>
+                    <line x1="8" y1="6" x2="8" y2="9.5" stroke="#0a0a0a" stroke-width="1.6" stroke-linecap="round"/>
+                    <circle cx="8" cy="11.5" r=".75" fill="#0a0a0a"/>
+                </svg>
+            </div>
+            <span class="esc-title">Escalation Alerts</span>
+            <span class="esc-badge" id="esc-count"></span>
+        </div>
+        <div id="esc-list"></div>
+    </div>
+
+    <!-- ─── Stats bar ────────────────────────────────────── -->
+    <div class="stat-bar">
+        <div class="stat-card">
+            <div class="stat-label">Total Sent</div>
+            <div class="stat-value" id="s-total">—</div>
+            <div class="stat-sub">all time</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Delivered</div>
+            <div class="stat-value" id="s-delivered">—</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Failed</div>
+            <div class="stat-value" id="s-failed">—</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Deferred</div>
+            <div class="stat-value" id="s-deferred">—</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Escalated</div>
+            <div class="stat-value" id="s-escalated">—</div>
+        </div>
+        <div class="stat-card hero">
+            <div class="stat-label">Success Rate</div>
+            <div class="stat-value" id="s-rate">—</div>
+            <div class="stat-sub">of dispatched</div>
+        </div>
+    </div>
+
+    <!-- ─── Channel Performance + Fallback Activity ──────── -->
+    <div class="col-2">
+
+        <div class="panel">
+            <div class="panel-hdr">
+                <span class="panel-title">Channel Performance</span>
+                <span class="panel-meta">Delivery attempts</span>
+            </div>
+            <div class="col-3" style="margin:0;border-radius:0;background:var(--rule-2);">
+                <div class="ch-block">
+                    <div class="ch-label">Push</div>
+                    <div class="ch-number" id="ch-push-total">—</div>
+                    <div class="ch-row">
+                        <div class="ch-stat">&#10003;&nbsp;<strong id="ch-push-success">—</strong> sent</div>
+                        <div class="ch-stat">&#10007;&nbsp;<strong id="ch-push-failed">—</strong> fail</div>
+                    </div>
+                </div>
+                <div class="ch-block">
+                    <div class="ch-label">SMS</div>
+                    <div class="ch-number" id="ch-sms-total">—</div>
+                    <div class="ch-row">
+                        <div class="ch-stat">&#10003;&nbsp;<strong id="ch-sms-success">—</strong> sent</div>
+                        <div class="ch-stat">&#10007;&nbsp;<strong id="ch-sms-failed">—</strong> fail</div>
+                    </div>
+                </div>
+                <div class="ch-block">
+                    <div class="ch-label">Email</div>
+                    <div class="ch-number" id="ch-email-total">—</div>
+                    <div class="ch-row">
+                        <div class="ch-stat">&#10003;&nbsp;<strong id="ch-email-success">—</strong> sent</div>
+                        <div class="ch-stat">&#10007;&nbsp;<strong id="ch-email-failed">—</strong> fail</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-hdr">
+                <span class="panel-title">Fallback Activity</span>
+                <span class="panel-meta">Escalated channels</span>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Notification</th>
+                        <th>Path</th>
+                        <th>Trigger</th>
+                    </tr>
+                </thead>
+                <tbody id="tb-fallback">
+                    <tr class="empty-row"><td colspan="3">No fallback events yet</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+
+    <!-- ─── Recent Notifications ─────────────────────────── -->
+    <div class="panel">
+        <div class="panel-hdr">
+            <span class="panel-title">Recent Notifications</span>
+            <span class="panel-meta">Latest 10</span>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Event</th>
+                    <th>User</th>
+                    <th>Type</th>
+                    <th>Urgency</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="tb-recent">
+                <tr class="empty-row"><td colspan="6">Loading&hellip;</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ─── Quick Test Scenarios ─────────────────────────── -->
+    <div class="panel">
+        <div class="panel-hdr">
+            <span class="panel-title">Quick Test Scenarios</span>
+            <span class="panel-meta">Uses live API</span>
+        </div>
+        <div class="panel-body">
+            <div class="test-grid">
+
+                <button class="test-card" id="test-normal" onclick="runScenario('normal')">
+                    <div class="test-ic">
+                        <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+                            <path d="M3 8.5L6.5 12L13 5" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+                    <div class="test-name">Normal Notification</div>
+                    <div class="test-desc">Delivers via Push on first attempt with no failures.</div>
+                </button>
+
+                <button class="test-card" id="test-fallback" onclick="runScenario('fallback')">
+                    <div class="test-ic">
+                        <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+                            <path d="M3 8H13M9.5 4.5L13 8L9.5 11.5" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+                    <div class="test-name">Push Failure → SMS</div>
+                    <div class="test-desc">Push is forced to fail; dispatcher falls back to SMS.</div>
+                </button>
+
+                <button class="test-card" id="test-timeout" onclick="runScenario('timeout')">
+                    <div class="test-ic">
+                        <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+                            <circle cx="8" cy="8.5" r="5.5" stroke="#fff" stroke-width="1.6"/>
+                            <path d="M8 5.5V9L10 10.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M6 1.5H10" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <div class="test-name">Push &amp; SMS → Email</div>
+                    <div class="test-desc">Push and SMS both fail; dispatcher falls back to Email.</div>
+                </button>
+
+                <button class="test-card" id="test-escalate" onclick="runScenario('escalate')">
+                    <div class="test-ic">
+                        <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+                            <path d="M8 2L14 13H2L8 2Z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/>
+                            <line x1="8" y1="6" x2="8" y2="9" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
+                            <circle cx="8" cy="11" r=".7" fill="#fff"/>
+                        </svg>
+                    </div>
+                    <div class="test-name">Urgent → Escalation</div>
+                    <div class="test-desc">All channels fail on an urgent notification — triggers escalation alert.</div>
+                </button>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── Manual Send ───────────────────────────────────── -->
+    <div class="panel">
+        <div class="panel-hdr">
+            <span class="panel-title">Send Notification</span>
+            <span class="panel-meta">Manual</span>
+        </div>
+        <div class="panel-body">
+            <div class="form-grid">
+                <div class="field">
+                    <label for="f-user">User ID</label>
+                    <input id="f-user" type="text" value="dashboard_user">
+                </div>
+                <div class="field">
+                    <label for="f-event">Event Type</label>
+                    <input id="f-event" type="text" value="dashboard_test">
+                </div>
+                <div class="field">
+                    <label for="f-urgency">Urgency</label>
+                    <select id="f-urgency">
+                        <option value="normal">Normal</option>
+                        <option value="urgent">Urgent</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="f-type">Notification Type</label>
+                    <select id="f-type">
+                        <option value="automatic">Automatic</option>
+                        <option value="manual">Manual</option>
+                    </select>
+                </div>
+                <div class="field full">
+                    <label for="f-msg">Message</label>
+                    <textarea id="f-msg">Dashboard test notification</textarea>
+                </div>
+                <div class="field full">
+                    <button class="btn-primary" id="send-btn" onclick="sendManual()">
+                        Send Notification
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div><!-- /page -->
+
+<div id="toast"></div>
+
+<script>
+/* ─── State ─────────────────────────────────────────────── */
+let apiKey = "";
+let refreshTimer = null;
+
+/* ─── Helpers ───────────────────────────────────────────── */
+function getKey() {
+    if (!apiKey) apiKey = prompt("Enter your API Key") || "";
+    return apiKey;
+}
+
+function toast(msg, isErr = false) {
+    const el = document.getElementById("toast");
+    el.textContent = msg;
+    el.className = "show" + (isErr ? " err" : "");
+    clearTimeout(el._t);
+    el._t = setTimeout(() => { el.className = ""; }, 4000);
+}
+
+function set(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+}
+
+function statusBadge(status) {
+    const map = {
+        delivered:            "b-delivered",
+        all_channels_failed:  "b-failed",
+        deferred_quiet_hours: "b-deferred",
+        pending:              "b-pending",
+        escalated:            "b-escalated",
+        scheduled:            "b-scheduled",
+        timeout:              "b-timeout",
+    };
+    const cls = map[status] || "b-default";
+    const label = status.replace(/_/g, " ");
+    return `<span class="badge ${cls}"><span class="badge-dot"></span>${label}</span>`;
+}
+
+function fmtTime(iso) {
+    if (!iso) return "—";
+    try {
+        return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    } catch { return iso; }
+}
+
+function nowStr() {
+    return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+/* ─── Animated counter ──────────────────────────────────── */
+function animateCount(el, target, suffix = "") {
+    if (typeof target !== "number") { el.textContent = target; return; }
+    const start = parseFloat(el.textContent) || 0;
+    if (start === target) return;
+    const dur = 400;
+    const t0 = performance.now();
+    const isFloat = String(target).includes(".");
+    function step(t) {
+        const p = Math.min((t - t0) / dur, 1);
+        const ease = 1 - Math.pow(1 - p, 3);
+        const val = start + (target - start) * ease;
+        el.textContent = (isFloat ? val.toFixed(1) : Math.round(val)) + suffix;
+        if (p < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+}
+
+/* ─── Load dashboard ────────────────────────────────────── */
+async function loadDashboard() {
+    const key = getKey();
+    if (!key) return;
+
+    const btn = document.getElementById("refresh-btn");
+    btn.innerHTML = '<span class="spin"></span>';
+    btn.disabled = true;
+
+    try {
+        const res = await fetch("/dashboard/stats", { headers: { "X-API-Key": key } });
+        if (!res.ok) { toast(`Error ${res.status}: unable to load stats`, true); return; }
+        const d = await res.json();
+
+        /* Overview */
+        animateCount(document.getElementById("s-total"),     d.total);
+        animateCount(document.getElementById("s-delivered"), d.delivered);
+        animateCount(document.getElementById("s-failed"),    d.failed);
+        animateCount(document.getElementById("s-deferred"),  d.deferred);
+        animateCount(document.getElementById("s-escalated"), d.escalated);
+        animateCount(document.getElementById("s-rate"),      d.success_rate, "%");
+
+        /* Channels */
+        for (const ch of ["push", "sms", "email"]) {
+            const s = d.channels[ch] || { total: 0, success: 0, failed: 0 };
+            animateCount(document.getElementById(`ch-${ch}-total`),   s.total);
+            set(`ch-${ch}-success`, s.success);
+            set(`ch-${ch}-failed`,  s.failed);
+        }
+
+        /* Fallback table */
+        const fbEl = document.getElementById("tb-fallback");
+        if (!d.fallbacks || d.fallbacks.length === 0) {
+            fbEl.innerHTML = '<tr class="empty-row"><td colspan="3">No fallback events recorded</td></tr>';
+        } else {
+            fbEl.innerHTML = [...d.fallbacks].reverse().slice(0, 8).map(f => `
+                <tr>
+                    <td class="cell-mono">${f.notification_id.slice(0,8)}&hellip;</td>
+                    <td>
+                        <span class="fb-pill">${f.from_channel}</span>
+                        <span class="fb-arrow">&rarr;</span>
+                        <span class="fb-pill">${f.to_channel}</span>
+                    </td>
+                    <td>${statusBadge(f.reason)}</td>
+                </tr>`).join("");
+        }
+
+        /* Escalation banner */
+        const banner = document.getElementById("escalation-banner");
+        const escList = document.getElementById("esc-list");
+        if (d.escalations && d.escalations.length > 0) {
+            banner.className = "visible";
+            set("esc-count", `${d.escalations.length} alert${d.escalations.length !== 1 ? "s" : ""}`);
+            escList.innerHTML = d.escalations.map(e => `
+                <div class="esc-row">
+                    <span class="esc-id">${e.notification_id.slice(0,8)}&hellip;</span>
+                    <span class="esc-reason">${e.reason}</span>
+                    <span class="esc-time">${fmtTime(e.triggered_at)}</span>
+                </div>`).join("");
+        } else {
+            banner.className = "";
+        }
+
+        /* Recent table */
+        const recEl = document.getElementById("tb-recent");
+        if (!d.recent || d.recent.length === 0) {
+            recEl.innerHTML = '<tr class="empty-row"><td colspan="6">No notifications yet</td></tr>';
+        } else {
+            recEl.innerHTML = d.recent.map(n => `
+                <tr>
+                    <td class="cell-mono">${n.id.slice(0,8)}&hellip;</td>
+                    <td>${n.event_type}</td>
+                    <td>${n.user_id}</td>
+                    <td>${n.notification_type}</td>
+                    <td>${n.urgency}</td>
+                    <td>${statusBadge(n.status)}</td>
+                </tr>`).join("");
+        }
+
+        document.getElementById("last-updated").textContent = "Updated " + nowStr();
+
+    } catch (err) {
+        toast("Unable to reach the API", true);
+    } finally {
+        btn.innerHTML = "Refresh";
+        btn.disabled = false;
+    }
+}
+
+/* ─── Quick test scenarios ──────────────────────────────── */
+const SCENARIOS = {
+    normal:   { label: "Normal",           payload: { urgency: "normal",  event_type: "normal_demo",        force_fail_channels: [] } },
+    fallback: { label: "Push Failure→SMS",  payload: { urgency: "normal",  event_type: "fallback_demo",       force_fail_channels: ["push"] } },
+    timeout:  { label: "Push&SMS→Email",    payload: { urgency: "normal",  event_type: "multifallback_demo",  force_fail_channels: ["push","sms"] } },
+    escalate: { label: "Urgent→Escalation", payload: { urgency: "urgent",  event_type: "escalation_demo",     force_fail_channels: ["push","sms","email"] } },
+};
+
+async function runScenario(name) {
+    const key = getKey();
+    if (!key) return;
+
+    const scenario = SCENARIOS[name];
+    const btn = document.getElementById(`test-${name}`);
+    btn.disabled = true;
+
+    const body = {
+        user_id: "dashboard_demo",
+        message: `[Demo] ${scenario.label}`,
+        notification_type: "manual",
+        scheduled_at: null,
+        dedup_key: `demo-${name}-${Date.now()}`,
+        ...scenario.payload,
+    };
+
+    try {
+        const res = await fetch("/notifications", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-API-Key": key },
+            body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (res.ok) {
+            toast(`[${scenario.label}] Submitted — ${data.id.slice(0,8)}…`);
+            setTimeout(loadDashboard, 2800);
+        } else {
+            toast(`[${scenario.label}] ${data.detail || data.error || res.status}`, true);
+        }
+    } catch {
+        toast(`[${scenario.label}] Network error`, true);
+    } finally {
+        setTimeout(() => { btn.disabled = false; }, 5500);
+    }
+}
+
+/* ─── Manual send ───────────────────────────────────────── */
+async function sendManual() {
+    const key = getKey();
+    if (!key) return;
+
+    const btn = document.getElementById("send-btn");
+    btn.innerHTML = '<span class="spin"></span> Sending\u2026';
+    btn.disabled = true;
+
+    try {
+        const res = await fetch("/notifications", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-API-Key": key },
+            body: JSON.stringify({
+                user_id:             document.getElementById("f-user").value,
+                event_type:          document.getElementById("f-event").value,
+                urgency:             document.getElementById("f-urgency").value,
+                message:             document.getElementById("f-msg").value,
+                notification_type:   document.getElementById("f-type").value,
+                dedup_key:           "manual-" + Date.now(),
+                scheduled_at:        null,
+                force_fail_channels: [],
+            }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+            toast("Notification submitted — ID: " + data.id.slice(0,8) + "\u2026");
+            setTimeout(loadDashboard, 1500);
+        } else {
+            toast(data.detail || data.error || "Failed to send", true);
+        }
+    } catch {
+        toast("Unable to connect to the API", true);
+    } finally {
+        btn.innerHTML = "Send Notification";
+        btn.disabled = false;
+    }
+}
+
+/* ─── Boot ──────────────────────────────────────────────── */
+function startAutoRefresh() {
+    if (refreshTimer) clearInterval(refreshTimer);
+    refreshTimer = setInterval(loadDashboard, 5000);
+}
+
+loadDashboard().then(startAutoRefresh);
+</script>
+</body>
+</html>
