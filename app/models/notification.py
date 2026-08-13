@@ -1,80 +1,82 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Optional
 
-from sqlalchemy import Column, String, DateTime, UniqueConstraint
-from sqlalchemy.orm import declarative_base
+from sqlalchemy import String, DateTime, UniqueConstraint
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
-Base = declarative_base()
+class Base(DeclarativeBase):
+    pass
 
 
 class Notification(Base):
     __tablename__ = "notifications"
 
-    id = Column(
+    id: Mapped[str] = mapped_column(
         String,
         primary_key=True,
         default=lambda: str(uuid.uuid4())
     )
 
-    user_id = Column(String, nullable=False)
-    event_type = Column(String, nullable=False)
-    urgency = Column(String, nullable=False)
-    message = Column(String, nullable=False)
+    user_id: Mapped[str] = mapped_column(String, nullable=False)
+    event_type: Mapped[str] = mapped_column(String, nullable=False)
+    urgency: Mapped[str] = mapped_column(String, nullable=False)
+    message: Mapped[str] = mapped_column(String, nullable=False)
 
-    dedup_key = Column(String, nullable=True)
+    dedup_key: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     # manual, automatic, or scheduled
-    notification_type = Column(
+    notification_type: Mapped[str] = mapped_column(
         String,
         nullable=False,
         default="automatic"
     )
 
     # Time at which a scheduled notification should be delivered
-    scheduled_at = Column(
+    scheduled_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime,
         nullable=True
     )
 
-    status = Column(
+    status: Mapped[str] = mapped_column(
         String,
         default="pending"
     )
 
-    created_at = Column(
+    created_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=datetime.utcnow
+        default=lambda: datetime.now(timezone.utc)
     )
 
 
 class DeliveryAttempt(Base):
     __tablename__ = "delivery_attempts"
 
-    id = Column(
+    id: Mapped[str] = mapped_column(
         String,
         primary_key=True,
         default=lambda: str(uuid.uuid4())
     )
 
-    notification_id = Column(
+    notification_id: Mapped[str] = mapped_column(
         String,
         nullable=False
     )
 
-    channel = Column(
+    channel: Mapped[str] = mapped_column(
         String,
         nullable=False
     )
 
-    status = Column(
+    status: Mapped[str] = mapped_column(
         String,
         nullable=False
     )
 
-    attempted_at = Column(
+    attempted_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=datetime.utcnow
+        default=lambda: datetime.now(timezone.utc)
     )
 
     __table_args__ = (
@@ -89,27 +91,27 @@ class DeliveryAttempt(Base):
 class UserPreference(Base):
     __tablename__ = "user_preferences"
 
-    user_id = Column(
+    user_id: Mapped[str] = mapped_column(
         String,
         primary_key=True
     )
 
-    channel_priority = Column(
+    channel_priority: Mapped[Optional[str]] = mapped_column(
         String,
         nullable=True
     )
 
-    quiet_hours_start = Column(
+    quiet_hours_start: Mapped[Optional[str]] = mapped_column(
         String,
         nullable=True
     )
 
-    quiet_hours_end = Column(
+    quiet_hours_end: Mapped[Optional[str]] = mapped_column(
         String,
         nullable=True
     )
 
-    opted_out_channels = Column(
+    opted_out_channels: Mapped[Optional[str]] = mapped_column(
         String,
         nullable=True
     )
@@ -118,23 +120,23 @@ class UserPreference(Base):
 class Escalation(Base):
     __tablename__ = "escalations"
 
-    id = Column(
+    id: Mapped[str] = mapped_column(
         String,
         primary_key=True,
         default=lambda: str(uuid.uuid4())
     )
 
-    notification_id = Column(
+    notification_id: Mapped[str] = mapped_column(
         String,
         nullable=False
     )
 
-    triggered_at = Column(
+    triggered_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=datetime.utcnow
+        default=lambda: datetime.now(timezone.utc)
     )
 
-    reason = Column(
+    reason: Mapped[str] = mapped_column(
         String,
         nullable=False
     )

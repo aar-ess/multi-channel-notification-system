@@ -1,6 +1,6 @@
 import asyncio
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import FastAPI, BackgroundTasks
 from pydantic import BaseModel
@@ -16,7 +16,6 @@ from app.services.dispatcher import dispatch_notification
 app = FastAPI(
     title="Multi-Channel Notification Delivery System"
 )
-
 
 create_tables()
 
@@ -44,23 +43,17 @@ def health_check():
     return {"status": "ok"}
 
 
-def is_quiet_hours(
-    current_time,
-    start_time,
-    end_time
-):
+def is_quiet_hours(current_time, start_time, end_time):
     if not start_time or not end_time:
         return False
 
     try:
         start = datetime.strptime(
-            start_time,
-            "%H:%M"
+            start_time, "%H:%M"
         ).time()
 
         end = datetime.strptime(
-            end_time,
-            "%H:%M"
+            end_time, "%H:%M"
         ).time()
 
     except ValueError:
@@ -73,6 +66,28 @@ def is_quiet_hours(
         )
 
     return start <= current_time < end
+
+
+def seconds_until_quiet_hours_end(
+    current_datetime,
+    end_time
+):
+    end = datetime.strptime(
+        end_time,
+        "%H:%M"
+    ).time()
+
+    end_datetime = datetime.combine(
+        current_datetime.date(),
+        end
+    )
+
+    if end_datetime <= current_datetime:
+        end_datetime += timedelta(days=1)
+
+    return (
+        end_datetime - current_datetime
+    ).total_seconds()
 
 
 async def run_dispatch(
@@ -90,7 +105,7 @@ async def run_dispatch(
         if notification is None:
             return
 
-        # Wait until scheduled time.
+        # Handle scheduled notifications.
         if notification.scheduled_at:
             now = datetime.now()
 
@@ -147,25 +162,63 @@ async def run_dispatch(
                     if channel.strip()
                 ]
 
-            current_time = datetime.now().time()
+            # Urgent notifications ALWAYS bypass quiet hours.
+            if notification.urgency.lower() != "urgent":
 
-            if is_quiet_hours(
-                current_time,
-                preference.quiet_hours_start,
-                preference.quiet_hours_end
-            ):
-                notification.status = (
-                    "deferred_quiet_hours"
-                )
+                current_datetime = datetime.now()
 
-                db.commit()
+                if is_quiet_hours(
+                    current_datetime.time(),
+                    preference.quiet_hours_start,
+                    preference.quiet_hours_end
+                ):
+                    notification.status = (
+                        "deferred_quiet_hours"
+                    )
 
-                print(
-                    "NOTIFICATION DEFERRED: "
-                    "quiet hours active"
-                )
+                    db.commit()
 
-                return
+                    print(
+                        "NOTIFICATION DEFERRED: "
+                        "quiet hours active"
+                    )
+
+                    # Save the value BEFORE closing the
+                    # SQLAlchemy session. This prevents
+                    # DetachedInstanceError.
+                    quiet_hours_end = (
+                        preference.quiet_hours_end
+                    )
+
+                    db.close()
+
+                    # Wait until quiet hours end.
+                    wait_seconds = (
+                        seconds_until_quiet_hours_end(
+                            current_datetime,
+                            quiet_hours_end
+                        )
+                    )
+
+                    await asyncio.sleep(
+                        wait_seconds
+                    )
+
+                    # Re-open the database.
+                    db = SessionLocal()
+
+                    notification = db.get(
+                        Notification,
+                        notif_id
+                    )
+
+                    if notification is None:
+                        return
+
+                    print(
+                        "QUIET HOURS ENDED: "
+                        "resuming notification dispatch"
+                    )
 
         result = await dispatch_notification(
             notification,
@@ -174,9 +227,11 @@ async def run_dispatch(
             opted_out_channels
         )
 
-        notification.status = result["status"]
-
-        db.commit()
+        # Do not overwrite the status when another
+        # concurrent worker is already processing it.
+        if result.get("status") and result["status"] != "already_processing":
+            notification.status = str(result["status"])
+            db.commit()
 
     finally:
         db.close()
@@ -215,7 +270,7 @@ async def submit_notification(
     db = SessionLocal()
 
     try:
-
+        # Submission-level deduplication.
         if payload.dedup_key:
 
             existing = (

@@ -1,3 +1,7 @@
+import asyncio
+
+from sqlalchemy.exc import IntegrityError
+
 from app.services.channels import (
     send_push,
     send_sms,
@@ -12,15 +16,19 @@ from app.models.notification import (
 )
 
 
-MAX_RETRIES = 2
+TIMEOUT_BUDGETS = {
+    "push": 3,
+    "sms": 8,
+    "email": 15,
+}
 
 
 async def dispatch_notification(
     notification,
-    force_fail_channels=None,
-    preferred_channels=None,
-    opted_out_channels=None
-):
+    force_fail_channels: list[str] | None = None,
+    preferred_channels: list[str] | None = None,
+    opted_out_channels: list[str] | None = None
+) -> dict[str, str | None]:
     if force_fail_channels is None:
         force_fail_channels = []
 
@@ -40,7 +48,6 @@ async def dispatch_notification(
         "email": send_email,
     }
 
-    # Build delivery order using user preferences.
     channels = []
 
     for channel_name in preferred_channels:
@@ -49,13 +56,9 @@ async def dispatch_notification(
             and channel_name not in opted_out_channels
         ):
             channels.append(
-                (
-                    channel_name,
-                    channel_functions[channel_name]
-                )
+                (channel_name, channel_functions[channel_name])
             )
 
-    # Add remaining available channels.
     for channel_name in [
         "push",
         "sms",
@@ -66,101 +69,18 @@ async def dispatch_notification(
             and channel_name not in opted_out_channels
         ):
             channels.append(
-                (
-                    channel_name,
-                    channel_functions[channel_name]
-                )
+                (channel_name, channel_functions[channel_name])
             )
 
-    # Try each channel.
-    for channel_index, (
-        channel_name,
-        sender
-    ) in enumerate(channels):
-
-        channel_succeeded = False
-
-        # Retry the current channel up to MAX_RETRIES times.
-        for attempt_number in range(
-            1,
-            MAX_RETRIES + 1
-        ):
-
-            should_fail = (
-                channel_name in force_fail_channels
-            )
-
-            result = await sender(
-                notification,
-                force_fail=should_fail
-            )
-
-            print(
-                f"{channel_name.upper()} "
-                f"ATTEMPT {attempt_number}: "
-                f"{result['status']}"
-            )
-
-            db = SessionLocal()
-
-            try:
-                existing_attempt = (
-                    db.query(DeliveryAttempt)
-                    .filter(
-                        DeliveryAttempt.notification_id
-                        == notification.id,
-                        DeliveryAttempt.channel
-                        == channel_name
-                    )
-                    .first()
-                )
-
-                if existing_attempt:
-                    existing_attempt.status = (
-                        result["status"]
-                    )
-                else:
-                    delivery_attempt = DeliveryAttempt(
-                        notification_id=notification.id,
-                        channel=channel_name,
-                        status=result["status"]
-                    )
-
-                    db.add(delivery_attempt)
-
-                db.commit()
-
-            finally:
-                db.close()
-
-            if result["status"] == "sent":
-                channel_succeeded = True
-
-                return {
-                    "status": "delivered",
-                    "channel": channel_name
-                }
-
-        # Current channel failed after all retries.
-        # Escalate to the next available channel.
-        if not channel_succeeded:
-
-            next_channel = None
-
-            if channel_index + 1 < len(channels):
-                next_channel = channels[
-                    channel_index + 1
-                ][0]
-
+    # If every channel is opted out, fail immediately.
+    if not channels:
+        if notification.urgency.lower() == "urgent":
             db = SessionLocal()
 
             try:
                 escalation = Escalation(
                     notification_id=notification.id,
-                    reason=(
-                        f"{channel_name} failed "
-                        f"after {MAX_RETRIES} attempts"
-                    )
+                    reason="All channels are opted out"
                 )
 
                 db.add(escalation)
@@ -169,12 +89,133 @@ async def dispatch_notification(
             finally:
                 db.close()
 
-            if next_channel:
+            print(
+                "ESCALATION: urgent notification "
+                "has no available channels"
+            )
+
+        return {
+            "status": "all_channels_failed",
+            "channel": None
+        }
+
+    # Try each channel once.
+    # Failure or timeout immediately moves to the next channel.
+    for channel_name, sender in channels:
+
+        db = SessionLocal()
+
+        try:
+            delivery_attempt = DeliveryAttempt(
+                notification_id=notification.id,
+                channel=channel_name,
+                status="in_progress"
+            )
+
+            db.add(delivery_attempt)
+
+            try:
+                db.commit()
+
+            except IntegrityError:
+                db.rollback()
+
                 print(
-                    f"ESCALATING: "
-                    f"{channel_name.upper()} -> "
-                    f"{next_channel.upper()}"
+                    f"{channel_name.upper()}: "
+                    "already claimed, skipping duplicate dispatch"
                 )
+
+                return {
+                    "status": "already_processing",
+                    "channel": channel_name
+                }
+
+        finally:
+            db.close()
+
+        should_fail = (
+            channel_name in force_fail_channels
+        )
+
+        try:
+            result = await asyncio.wait_for(
+                sender(
+                    notification,
+                    force_fail=should_fail
+                ),
+                timeout=TIMEOUT_BUDGETS[channel_name]
+            )
+
+        except asyncio.TimeoutError:
+            result = {
+                "status": "timeout",
+                "channel": channel_name
+            }
+
+        except Exception:
+            result = {
+                "status": "failed",
+                "channel": channel_name
+            }
+
+        print(
+            f"{channel_name.upper()}: "
+            f"{result['status']}"
+        )
+
+        db = SessionLocal()
+
+        try:
+            delivery_attempt = (
+                db.query(DeliveryAttempt)
+                .filter(
+                    DeliveryAttempt.notification_id
+                    == notification.id,
+                    DeliveryAttempt.channel
+                    == channel_name
+                )
+                .first()
+            )
+
+            if delivery_attempt:
+                delivery_attempt.status = (
+                    result["status"]
+                )
+
+            db.commit()
+
+        finally:
+            db.close()
+
+        if result["status"] == "sent":
+            return {
+                "status": "delivered",
+                "channel": channel_name
+            }
+
+        # Otherwise immediately continue to next channel.
+
+    # Every available channel failed/timed out.
+    if notification.urgency.lower() == "urgent":
+
+        db = SessionLocal()
+
+        try:
+            escalation = Escalation(
+                notification_id=notification.id,
+                reason="All channels failed or timed out"
+            )
+
+            db.add(escalation)
+            db.commit()
+
+        finally:
+            db.close()
+
+        print(
+            "ESCALATION: urgent notification "
+            "failed on all channels"
+        )
 
     return {
         "status": "all_channels_failed",
